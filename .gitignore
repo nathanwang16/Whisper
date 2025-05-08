@@ -1,0 +1,23 @@
+# Build artifacts
+DerivedData/
+build/
+.build/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+
+# Xcode backup files
+*.moved-aside
+*.xcuserdatad
+*.xcscmblueprint
+
+# Cursor or other AI tools (if any)
+cursor-artifacts/
+
+# Audio, generated .pcm or .tmp
+*.pcm
+*.tmp
+
+# Cache, Logs
+*.log
+*.swp
+.DS_Store
