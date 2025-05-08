@@ -12,6 +12,7 @@ build/
 
 # Cursor or other AI tools (if any)
 cursor-artifacts/
+.cursor/
 
 # Audio, generated .pcm or .tmp
 *.pcm

@@ -17,16 +17,34 @@ struct AudioFilesListView: View {
     @State private var currentlyPlayingFile: AudioFile?
     @State private var isLoading: Bool = false
     @State private var downloadingFile: AudioFile? = nil
+    @State private var renamingFile: AudioFile? = nil
+    @State private var newCustomName: String = ""
+    @State private var showRenameAlert: Bool = false
+    @State private var renameError: String? = nil
+    @State private var transcriptSnippets: [String: String] = [:] // [audioFile.name: first2chars]
+    @State private var transcribingFile: AudioFile? = nil
     
     private let localDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     
     var body: some View {
         NavigationView {
             List {
-				ForEach(fileManager.audioFiles, id: \.self) { file in
+                ForEach(fileManager.audioFiles, id: \.self) { file in
                     HStack {
-                        Text(file.name)
-                            .foregroundColor(currentlyPlayingFile == file ? .blue : .primary)
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Text(file.customName?.isEmpty == false ? file.customName! : file.name)
+                                    .foregroundColor(currentlyPlayingFile == file ? .blue : .primary)
+                                if let snippet = transcriptSnippets[file.name] {
+                                    Text("[\(snippet)]")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            if let error = renameError, renamingFile == file {
+                                Text(error).foregroundColor(.red).font(.caption)
+                            }
+                        }
                         Spacer()
                         if currentlyPlayingFile == file {
                             Text("Playing")
@@ -41,10 +59,33 @@ struct AudioFilesListView: View {
                         } else {
                             Circle().fill(Color.red).frame(width: 10, height: 10)
                         }
+                        Button(action: {
+                            Task { await handleAudioPlayback(for: file) }
+                        }) {
+                            Image(systemName: "play.circle.fill")
+                                .resizable()
+                                .frame(width: 28, height: 28)
+                                .foregroundColor(.accentColor)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        if transcriptSnippets[file.name] == nil {
+                            if transcribingFile == file {
+                                ProgressView().frame(width: 28, height: 28)
+                            } else {
+                                Button("Transcribe") {
+                                    Task { await handleTranscribe(for: file) }
+                                }
+                                .font(.caption)
+                                .buttonStyle(.bordered)
+                            }
+                        }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        Task { await handleAudioPlayback(for: file) }
+                        renamingFile = file
+                        newCustomName = file.customName ?? ""
+                        showRenameAlert = true
+                        renameError = nil
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
@@ -67,8 +108,22 @@ struct AudioFilesListView: View {
                 }
             }
             .onAppear {
-                Task { await fileManager.fetchAudioFiles() }
+                Task {
+                    await fileManager.fetchAudioFiles()
+                    await fetchAllTranscriptSnippets()
+                }
             }
+            .alert("Rename Audio File", isPresented: $showRenameAlert, actions: {
+                TextField("New name", text: $newCustomName)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") {
+                    Task { await handleRename() }
+                }
+            }, message: {
+                if let error = renameError {
+                    Text(error)
+                }
+            })
         }
     }
     
@@ -129,5 +184,64 @@ struct AudioFilesListView: View {
             try? FileManager.default.removeItem(at: localURL)
         }
         await fileManager.deleteAudioFile(file)
+    }
+    
+    private func handleRename() async {
+        guard let file = renamingFile else { return }
+        let trimmed = newCustomName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            renameError = "Name cannot be empty."
+            showRenameAlert = true
+            return
+        }
+        if fileManager.audioFiles.contains(where: { ($0.customName?.lowercased() ?? "") == trimmed.lowercased() && $0.name != file.name }) {
+            renameError = "Name already exists."
+            showRenameAlert = true
+            return
+        }
+        let success = await fileManager.renameAudioFile(file, to: trimmed)
+        if !success {
+            renameError = "Failed to rename."
+            showRenameAlert = true
+        } else {
+            renameError = nil
+            showRenameAlert = false
+        }
+    }
+    
+    private func fetchAllTranscriptSnippets() async {
+        for file in fileManager.audioFiles {
+            if let text = await fileManager.fetchTranscription(for: file), !text.isEmpty {
+                let snippet = String(text.prefix(2))
+                transcriptSnippets[file.name] = snippet
+            }
+        }
+    }
+    
+    private func handleTranscribe(for file: AudioFile) async {
+        transcribingFile = file
+        // Download audio file if not local
+        let localURL = localDirectory.appendingPathComponent(file.name)
+        if !FileManager.default.fileExists(atPath: localURL.path) {
+            if let remoteURL = await fileManager.downloadAudioFile(file) {
+                do {
+                    let data = try Data(contentsOf: remoteURL)
+                    try data.write(to: localURL)
+                } catch {
+                    print("Failed to download audio for transcription: \(error.localizedDescription)")
+                    transcribingFile = nil
+                    return
+                }
+            } else {
+                transcribingFile = nil
+                return
+            }
+        }
+        // Transcribe
+        if let transcript = await fileManager.transcribeAudioFile(file, localURL: localURL), !transcript.isEmpty {
+            await fileManager.uploadTranscription(for: file, text: transcript)
+            transcriptSnippets[file.name] = String(transcript.prefix(2))
+        }
+        transcribingFile = nil
     }
 }

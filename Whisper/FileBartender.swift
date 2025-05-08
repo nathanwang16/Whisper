@@ -7,15 +7,18 @@
 
 import Foundation
 import FirebaseStorage
+import Speech
 
 class AudioFileManager: ObservableObject {
     static let shared = AudioFileManager()
     @Published var audioFiles: [AudioFile] = [] // AudioFile is a struct with name, downloadURL, and timestamp
     private let storage = Storage.storage()
     private let storageRef: StorageReference
+    private let translateRef: StorageReference
     
     private init() {
         self.storageRef = storage.reference().child("audio")
+        self.translateRef = storage.reference().child("translate")
     }
     
     // MARK: - List Files
@@ -27,7 +30,8 @@ class AudioFileManager: ObservableObject {
             for item in result.items {
                 let metadata = try? await item.getMetadata()
                 let timestamp = metadata?.timeCreated ?? Date.distantPast
-                files.append(AudioFile(name: item.name, downloadURL: nil, timestamp: timestamp))
+                let customName = metadata?.customMetadata?["customName"]
+                files.append(AudioFile(name: item.name, customName: customName, downloadURL: nil, timestamp: timestamp))
             }
             self.audioFiles = files.sorted { $0.timestamp > $1.timestamp }
         } catch {
@@ -35,13 +39,17 @@ class AudioFileManager: ObservableObject {
         }
     }
     
-    // MARK: - Upload File
+    // MARK: - Upload File (with optional customName)
     @MainActor
-    func uploadAudioFile(_ fileURL: URL) async {
+    func uploadAudioFile(_ fileURL: URL, customName: String? = nil) async {
         let fileName = fileURL.lastPathComponent
         let fileRef = storageRef.child(fileName)
+        var metadata = StorageMetadata()
+        if let customName = customName {
+            metadata.customMetadata = ["customName": customName]
+        }
         do {
-            _ = try await fileRef.putFileAsync(from: fileURL)
+            _ = try await fileRef.putFileAsync(from: fileURL, metadata: metadata)
             await fetchAudioFiles()
         } catch {
             print("Failed to upload audio file: \(error.localizedDescription)")
@@ -71,11 +79,85 @@ class AudioFileManager: ObservableObject {
             return nil
         }
     }
+
+    // MARK: - Rename File (update customName in metadata)
+    @MainActor
+    func renameAudioFile(_ file: AudioFile, to newCustomName: String) async -> Bool {
+        let fileRef = storageRef.child(file.name)
+        do {
+            let metadata = StorageMetadata()
+            metadata.customMetadata = ["customName": newCustomName]
+            _ = try await fileRef.updateMetadata(metadata)
+            await fetchAudioFiles()
+            return true
+        } catch {
+            print("Failed to rename audio file: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    // MARK: - Transcription
+    func transcriptionFileName(for audioFile: AudioFile) -> String {
+        let base = (audioFile.name as NSString).deletingPathExtension
+        return base + ".txt"
+    }
+    
+    func checkTranscriptionExists(for audioFile: AudioFile) async -> Bool {
+        let fileName = transcriptionFileName(for: audioFile)
+        let fileRef = translateRef.child(fileName)
+        do {
+            _ = try await fileRef.getMetadata()
+            return true
+        } catch {
+            return false
+        }
+    }
+    
+    func fetchTranscription(for audioFile: AudioFile) async -> String? {
+        let fileName = transcriptionFileName(for: audioFile)
+        let fileRef = translateRef.child(fileName)
+        do {
+            let url = try await fileRef.downloadURL()
+            let data = try Data(contentsOf: url)
+            return String(data: data, encoding: .utf8)
+        } catch {
+            print("Failed to fetch transcription: \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    func uploadTranscription(for audioFile: AudioFile, text: String) async {
+        let fileName = transcriptionFileName(for: audioFile)
+        let fileRef = translateRef.child(fileName)
+        guard let data = text.data(using: .utf8) else { return }
+        do {
+            _ = try await fileRef.putDataAsync(data)
+        } catch {
+            print("Failed to upload transcription: \(error.localizedDescription)")
+        }
+    }
+    
+    func transcribeAudioFile(_ audioFile: AudioFile, localURL: URL, locale: Locale = Locale(identifier: "en-US")) async -> String? {
+        let recognizer = SFSpeechRecognizer(locale: locale)
+        guard let recognizer = recognizer, recognizer.isAvailable else { return nil }
+        let request = SFSpeechURLRecognitionRequest(url: localURL)
+        return await withCheckedContinuation { continuation in
+            recognizer.recognitionTask(with: request) { result, error in
+                if let result = result, result.isFinal {
+                    continuation.resume(returning: result.bestTranscription.formattedString)
+                } else if let error = error {
+                    print("Transcription error: \(error.localizedDescription)")
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
 }
 
 struct AudioFile: Identifiable, Hashable {
     let id = UUID()
-    let name: String
+    let name: String // unique file name (e.g., UUID or timestamp)
+    var customName: String? // user-customized name
     var downloadURL: URL?
     let timestamp: Date
 }

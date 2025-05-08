@@ -63,7 +63,7 @@ class AudioRecorder {
         audioRecorder?.stop()
         if let fileURL = audioRecorder?.url {
             Task {
-                await AudioFileManager.shared.uploadAudioFile(fileURL)
+                await AudioFileManager.shared.uploadAudioFile(fileURL, customName: nil)
             }
         }
         audioRecorder = nil
