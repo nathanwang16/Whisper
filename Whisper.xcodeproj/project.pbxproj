@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		F0708A542DCC6D2600E3EE1E /* .gitignore in Resources */ = {isa = PBXBuildFile; fileRef = F0708A532DCC6D2600E3EE1E /* .gitignore */; };
 		F0708A562DCC6EB600E3EE1E /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F0708A552DCC6EB600E3EE1E /* GoogleService-Info.plist */; };
+		F0708A592DCC6FB600E3EE1E /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = F0708A582DCC6FB600E3EE1E /* Inject */; };
+		F0708A5C2DCC709200E3EE1E /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0708A5B2DCC709200E3EE1E /* FirebaseCore */; };
+		F0708A5E2DCC709200E3EE1E /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = F0708A5D2DCC709200E3EE1E /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,6 +62,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0708A5C2DCC709200E3EE1E /* FirebaseCore in Frameworks */,
+				F0708A592DCC6FB600E3EE1E /* Inject in Frameworks */,
+				F0708A5E2DCC709200E3EE1E /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +127,9 @@
 			);
 			name = Whisper;
 			packageProductDependencies = (
+				F0708A582DCC6FB600E3EE1E /* Inject */,
+				F0708A5B2DCC709200E3EE1E /* FirebaseCore */,
+				F0708A5D2DCC709200E3EE1E /* FirebaseStorage */,
 			);
 			productName = Whisper;
 			productReference = F07089FD2DCC6ADE00E3EE1E /* Whisper.app */;
@@ -184,6 +193,7 @@
 				TargetAttributes = {
 					F07089FC2DCC6ADE00E3EE1E = {
 						CreatedOnToolsVersion = 16.3;
+						LastSwiftMigration = 1630;
 					};
 					F0708A092DCC6ADF00E3EE1E = {
 						CreatedOnToolsVersion = 16.3;
@@ -204,6 +214,10 @@
 			);
 			mainGroup = F07089F42DCC6ADD00E3EE1E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F0708A572DCC6FB600E3EE1E /* XCRemoteSwiftPackageReference "Inject" */,
+				F0708A5A2DCC709200E3EE1E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F07089FE2DCC6ADE00E3EE1E /* Products */;
 			projectDirPath = "";
@@ -319,6 +333,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FirebaseAppDelegateProxyEnabled = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -383,6 +398,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FirebaseAppDelegateProxyEnabled = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -406,16 +422,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U4CWN7MP9P;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click Yes!!!";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -424,6 +444,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = Nathan16.Whisper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -434,16 +456,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U4CWN7MP9P;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click Yes!!!";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -452,6 +478,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = Nathan16.Whisper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -569,6 +596,43 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F0708A572DCC6FB600E3EE1E /* XCRemoteSwiftPackageReference "Inject" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krzysztofzablocki/Inject.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.2;
+			};
+		};
+		F0708A5A2DCC709200E3EE1E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.12.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F0708A582DCC6FB600E3EE1E /* Inject */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0708A572DCC6FB600E3EE1E /* XCRemoteSwiftPackageReference "Inject" */;
+			productName = Inject;
+		};
+		F0708A5B2DCC709200E3EE1E /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0708A5A2DCC709200E3EE1E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		F0708A5D2DCC709200E3EE1E /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0708A5A2DCC709200E3EE1E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F07089F52DCC6ADD00E3EE1E /* Project object */;
 }
