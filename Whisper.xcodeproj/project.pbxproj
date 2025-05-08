@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		F0708A542DCC6D2600E3EE1E /* .gitignore in Resources */ = {isa = PBXBuildFile; fileRef = F0708A532DCC6D2600E3EE1E /* .gitignore */; };
+		F0708A562DCC6EB600E3EE1E /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F0708A552DCC6EB600E3EE1E /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,6 +33,7 @@
 		F0708A0A2DCC6ADF00E3EE1E /* WhisperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhisperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0708A142DCC6ADF00E3EE1E /* WhisperUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhisperUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0708A532DCC6D2600E3EE1E /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
+		F0708A552DCC6EB600E3EE1E /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -80,6 +82,7 @@
 		F07089F42DCC6ADD00E3EE1E = {
 			isa = PBXGroup;
 			children = (
+				F0708A552DCC6EB600E3EE1E /* GoogleService-Info.plist */,
 				F0708A532DCC6D2600E3EE1E /* .gitignore */,
 				F07089FF2DCC6ADE00E3EE1E /* Whisper */,
 				F0708A0D2DCC6ADF00E3EE1E /* WhisperTests */,
@@ -219,6 +222,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F0708A542DCC6D2600E3EE1E /* .gitignore in Resources */,
+				F0708A562DCC6EB600E3EE1E /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
