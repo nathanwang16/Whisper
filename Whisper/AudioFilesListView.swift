@@ -14,27 +14,27 @@ struct AudioFilesListView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject private var fileManager = AudioFileManager.shared
     @State private var audioPlayer: AVAudioPlayer?
-    @State private var currentlyPlayingFile: AudioFile?
+    @State private var currentlyPlayingFile: AppAudioFile?
     @State private var isLoading: Bool = false
-    @State private var downloadingFile: AudioFile? = nil
-    @State private var renamingFile: AudioFile? = nil
+    @State private var downloadingFile: AppAudioFile? = nil
+    @State private var renamingFile: AppAudioFile? = nil
     @State private var newCustomName: String = ""
     @State private var showRenameAlert: Bool = false
     @State private var renameError: String? = nil
     @State private var transcriptSnippets: [String: String] = [:] // [audioFile.name: first2chars]
-    @State private var transcribingFile: AudioFile? = nil
+    @State private var transcribingFile: AppAudioFile? = nil
     
     private let localDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     
     var body: some View {
         NavigationView {
             List {
-                ForEach(fileManager.audioFiles, id: \.self) { file in
+				ForEach(fileManager.audioFiles, id: \.self) { file in
                     HStack {
                         VStack(alignment: .leading) {
                             HStack {
                                 Text(file.customName?.isEmpty == false ? file.customName! : file.name)
-                                    .foregroundColor(currentlyPlayingFile == file ? .blue : .primary)
+                            .foregroundColor(currentlyPlayingFile == file ? .blue : .primary)
                                 if let snippet = transcriptSnippets[file.name] {
                                     Text("[\(snippet)]")
                                         .font(.caption)
@@ -118,7 +118,7 @@ struct AudioFilesListView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Save") {
                     Task { await handleRename() }
-                }
+            }
             }, message: {
                 if let error = renameError {
                     Text(error)
@@ -127,12 +127,12 @@ struct AudioFilesListView: View {
         }
     }
     
-    private func isFileDownloaded(_ file: AudioFile) -> Bool {
+    private func isFileDownloaded(_ file: AppAudioFile) -> Bool {
         let localURL = localDirectory.appendingPathComponent(file.name)
         return FileManager.default.fileExists(atPath: localURL.path)
     }
     
-    private func handleAudioPlayback(for file: AudioFile) async {
+    private func handleAudioPlayback(for file: AppAudioFile) async {
         if currentlyPlayingFile == file {
             stopAudio()
         } else {
@@ -140,7 +140,7 @@ struct AudioFilesListView: View {
         }
     }
     
-    private func playAudio(file: AudioFile) async {
+    private func playAudio(file: AppAudioFile) async {
         let localURL = localDirectory.appendingPathComponent(file.name)
         if isFileDownloaded(file) {
             do {
@@ -177,7 +177,7 @@ struct AudioFilesListView: View {
         currentlyPlayingFile = nil
     }
     
-    private func deleteAudioFile(_ file: AudioFile) async {
+    private func deleteAudioFile(_ file: AppAudioFile) async {
         // Remove local file if exists
         let localURL = localDirectory.appendingPathComponent(file.name)
         if FileManager.default.fileExists(atPath: localURL.path) {
@@ -218,7 +218,7 @@ struct AudioFilesListView: View {
         }
     }
     
-    private func handleTranscribe(for file: AudioFile) async {
+    private func handleTranscribe(for file: AppAudioFile) async {
         transcribingFile = file
         // Download audio file if not local
         let localURL = localDirectory.appendingPathComponent(file.name)
