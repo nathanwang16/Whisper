@@ -204,6 +204,7 @@ class AudioFileManager: ObservableObject {
             audioFile.setValue(localURL, forKey: "localURL")
         }
         try? context.save()
+        print("Saved audio file to Core Data: \(fileName)")
     }
 
     private func saveTranscriptToCoreData(fileName: String, text: String) {
@@ -223,6 +224,7 @@ class AudioFileManager: ObservableObject {
     private func fetchAudioFilesFromCoreData() -> [AppAudioFile] {
         let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "AudioFile")
         if let results = try? context.fetch(fetchRequest) {
+             print("Fetched \(results.count) audio files from Core Data")
             return results.compactMap { obj in
                 guard let fileName = obj.value(forKey: "fileName") as? String,
                       let timestamp = obj.value(forKey: "timestamp") as? Date else { return nil }
@@ -234,13 +236,319 @@ class AudioFileManager: ObservableObject {
         return []
     }
 
-    private func fetchTranscriptFromCoreData(fileName: String) -> String? {
+     func fetchTranscriptFromCoreData(fileName: String) -> String? {
         let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "Transcript")
         fetchRequest.predicate = NSPredicate(format: "fileName == %@", fileName)
         if let results = try? context.fetch(fetchRequest), let transcript = results.first {
             return transcript.value(forKey: "text") as? String
         }
         return nil
+    }
+
+    // MARK: - SYNC METHODS FOR COREDATA-DRIVEN ARCHITECTURE
+    @MainActor
+    func syncFromFirebaseToCoreData() async {
+        do {
+            let result = try await storageRef.listAll()
+            for item in result.items {
+                let metadata = try? await item.getMetadata()
+                let timestamp: Date = metadata?.timeCreated ?? Date.distantPast
+                let customName = metadata?.customMetadata?["customName"]
+                let senderUsername = metadata?.customMetadata?["senderUsername"] ?? ""
+                let senderUserID = metadata?.customMetadata?["senderUserID"] ?? ""
+                let fileName = item.name
+                // Try to find local file path
+                let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let localURL = documentsPath.appendingPathComponent(fileName).path
+                saveAudioFileToCoreData(fileName: fileName, customName: customName, senderUsername: senderUsername, senderUserID: senderUserID, timestamp: timestamp, localURL: localURL)
+            }
+        } catch {
+            print("Failed to sync from Firebase: \(error.localizedDescription)")
+        }
+    }
+
+    func downloadAudioFileFromFirebase(file: AudioFile) async -> URL? {
+        guard let fileName = file.fileName else { return nil }
+        let fileRef = storageRef.child(fileName)
+        do {
+            let url = try await fileRef.downloadURL()
+            return url
+        } catch {
+            print("Failed to get download URL: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    @MainActor
+    func renameAudioFileAndSync(_ file: AudioFile, to newCustomName: String) async -> Bool {
+        guard let fileName = file.fileName else { return false }
+        // Update Core Data first
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "AudioFile")
+        fetchRequest.predicate = NSPredicate(format: "fileName == %@", fileName)
+        if let results = try? context.fetch(fetchRequest), let existing = results.first as? NSManagedObject {
+            existing.setValue(newCustomName, forKey: "customName")
+            try? context.save()
+        }
+        // Sync to Firebase
+        let fileRef = storageRef.child(fileName)
+        do {
+            let metadata = StorageMetadata()
+            metadata.customMetadata = ["customName": newCustomName]
+            _ = try await fileRef.updateMetadata(metadata)
+            return true
+        } catch {
+            print("Failed to rename audio file in Firebase: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @MainActor
+    func deleteAudioFileAndSync(_ file: AudioFile) async {
+        guard let fileName = file.fileName else { return }
+        // Delete from Core Data
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "AudioFile")
+        fetchRequest.predicate = NSPredicate(format: "fileName == %@", fileName)
+        if let results = try? context.fetch(fetchRequest), let existing = results.first as? NSManagedObject {
+            context.delete(existing)
+            try? context.save()
+        }
+        // Delete from Firebase
+        let fileRef = storageRef.child(fileName)
+        do {
+            try await fileRef.delete()
+        } catch {
+            print("Failed to delete audio file in Firebase: \(error.localizedDescription)")
+        }
+    }
+
+    func transcribeAudioFileFromCoreData(_ file: AudioFile, localURL: URL, locale: Locale = Locale(identifier: "en-US")) async -> String? {
+        let recognizer = SFSpeechRecognizer(locale: locale)
+        guard let recognizer = recognizer, recognizer.isAvailable else { return nil }
+        let request = SFSpeechURLRecognitionRequest(url: localURL)
+        return await withCheckedContinuation { continuation in
+            recognizer.recognitionTask(with: request) { result, error in
+                if let result = result, result.isFinal {
+                    continuation.resume(returning: result.bestTranscription.formattedString)
+                } else if let error = error {
+                    print("Transcription error: \(error.localizedDescription)")
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    func uploadTranscriptionAndSync(_ file: AudioFile, text: String) async {
+        guard let fileName = file.fileName else { return }
+        let txtFileName = (fileName as NSString).deletingPathExtension + ".txt"
+        let fileRef = translateRef.child(txtFileName)
+        guard let data = text.data(using: .utf8) else { return }
+        // Save to Core Data
+        saveTranscriptToCoreData(fileName: txtFileName, text: text)
+        // Upload to Firebase
+        do {
+            _ = try await fileRef.putDataAsync(data)
+        } catch {
+            print("Failed to upload transcription to Firebase: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - DM USER MANAGEMENT
+    // Search users in Firestore by username prefix
+    func searchUsersInFirestore(prefix: String, completion: @escaping ([String]) -> Void) {
+        let db = Firestore.firestore()
+        let usersRef = db.collection("users")
+        // Firestore doesn't support 'startsWith' natively, so use range query
+        let end = prefix + "\u{f8ff}"
+        usersRef
+            .whereField("username", isGreaterThanOrEqualTo: prefix)
+            .whereField("username", isLessThanOrEqualTo: end)
+            .limit(to: 10)
+            .getDocuments { snapshot, error in
+                if let docs = snapshot?.documents {
+                    let names = docs.compactMap { $0.data()["username"] as? String }
+                    completion(names)
+                } else {
+                    completion([])
+                }
+            }
+    }
+
+    // Add user to local Core Data if exists in Firestore
+    func addUserToLocalIfExists(username: String, completion: @escaping (Bool) -> Void) {
+        let db = Firestore.firestore()
+        let usersRef = db.collection("users")
+        usersRef.whereField("username", isEqualTo: username).getDocuments { snapshot, error in
+            guard let doc = snapshot?.documents.first, let userID = doc.data()["uid"] as? String else {
+                completion(false)
+                return
+            }
+            let context = PersistenceController.shared.container.viewContext
+            let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "User")
+            fetchRequest.predicate = NSPredicate(format: "username == %@", username)
+            if let results = try? context.fetch(fetchRequest), results.first != nil {
+                completion(true) // Already exists locally
+                return
+            }
+            let entity = NSEntityDescription.entity(forEntityName: "User", in: context)!
+            let user = NSManagedObject(entity: entity, insertInto: context)
+            user.setValue(username, forKey: "username")
+            user.setValue(userID, forKey: "userID")
+            try? context.save()
+            completion(true)
+        }
+    }
+
+    // Delete user from local Core Data
+    func deleteUserFromLocal(username: String) {
+        let context = PersistenceController.shared.container.viewContext
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "User")
+        fetchRequest.predicate = NSPredicate(format: "username == %@", username)
+        if let results = try? context.fetch(fetchRequest) {
+            for obj in results {
+                if let user = obj as? NSManagedObject {
+                    context.delete(user)
+                }
+            }
+            try? context.save()
+        }
+    }
+
+    // MARK: - DM MESSAGE BACKEND
+    // Helper to get DM folder name (sorted UIDs)
+    private func dmFolderName(with otherUserID: String) -> String {
+        let myUID = UserDefaults.standard.string(forKey: "userID") ?? ""
+        return [myUID, otherUserID].sorted().joined(separator: "_")
+    }
+
+    // Upload DM message (audio file)
+    @MainActor
+    func uploadDMMessage(fileURL: URL, receiverUsername: String, receiverUserID: String) async {
+        let fileName = fileURL.lastPathComponent
+        let myUsername = UserDefaults.standard.string(forKey: "username") ?? ""
+        let myUID = UserDefaults.standard.string(forKey: "userID") ?? ""
+        let folder = dmFolderName(with: receiverUserID)
+        let storageRef = Storage.storage().reference().child("dm/")
+        let dmRef = storageRef.child("")
+        let fileRef = storageRef.child("dm/")
+        let dmFolderRef = Storage.storage().reference().child("dm/")
+        let dmFileRef = Storage.storage().reference().child("dm/")
+        let dmAudioRef = Storage.storage().reference().child("dm/")
+        let dmPath = "dm/\(folder)/\(fileName)"
+        let fileRef2 = Storage.storage().reference().child(dmPath)
+        var metadata = StorageMetadata()
+        metadata.customMetadata = [
+            "senderUsername": myUsername,
+            "senderUserID": myUID,
+            "receiverUsername": receiverUsername,
+            "receiverUserID": receiverUserID
+        ]
+        do {
+            _ = try await fileRef2.putFileAsync(from: fileURL, metadata: metadata)
+            // Firestore message doc
+            let db = Firestore.firestore()
+            let messageID = UUID().uuidString
+            let now = Date()
+            let docRef = db.collection("dmMessages").document(folder).collection("messages").document(messageID)
+            try await docRef.setData([
+                "messageID": messageID,
+                "audioFileName": fileName,
+                "senderUsername": myUsername,
+                "senderUserID": myUID,
+                "receiverUsername": receiverUsername,
+                "receiverUserID": receiverUserID,
+                "timestamp": Timestamp(date: now)
+            ])
+            // Save to Core Data
+            saveDMMessageToCoreData(messageID: messageID, audioFileName: fileName, senderUsername: myUsername, senderUserID: myUID, receiverUsername: receiverUsername, receiverUserID: receiverUserID, timestamp: now, localURL: fileURL.path)
+        } catch {
+            print("Failed to upload DM message: \(error.localizedDescription)")
+        }
+    }
+
+    // Fetch DM messages for a conversation
+    func fetchDMMessages(with otherUserID: String, completion: @escaping ([Message]) -> Void) {
+        let folder = dmFolderName(with: otherUserID)
+        let db = Firestore.firestore()
+        db.collection("dmMessages").document(folder).collection("messages").order(by: "timestamp").getDocuments { snapshot, error in
+            guard let docs = snapshot?.documents else {
+                completion([])
+                return
+            }
+            let messages: [Message] = docs.compactMap { doc in
+                let data = doc.data()
+                guard let messageID = data["messageID"] as? String,
+                      let audioFileName = data["audioFileName"] as? String,
+                      let senderUsername = data["senderUsername"] as? String,
+                      let senderUserID = data["senderUserID"] as? String,
+                      let receiverUsername = data["receiverUsername"] as? String,
+                      let receiverUserID = data["receiverUserID"] as? String,
+                      let timestamp = (data["timestamp"] as? Timestamp)?.dateValue() else { return nil }
+                // No localURL for remote fetch
+                let context = PersistenceController.shared.container.viewContext
+                let entity = NSEntityDescription.entity(forEntityName: "Message", in: context)!
+                let msg = Message(entity: entity, insertInto: nil)
+                msg.messageID = messageID
+                msg.audioFileName = audioFileName
+                msg.senderUsername = senderUsername
+                msg.senderUserID = senderUserID
+                msg.receiverUsername = receiverUsername
+                msg.receiverUserID = receiverUserID
+                msg.timestamp = timestamp
+                return msg
+            }
+            completion(messages)
+        }
+    }
+
+    // Save DM message to Core Data
+    private func saveDMMessageToCoreData(messageID: String, audioFileName: String, senderUsername: String, senderUserID: String, receiverUsername: String, receiverUserID: String, timestamp: Date, localURL: String?) {
+        let context = PersistenceController.shared.container.viewContext
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "Message")
+        fetchRequest.predicate = NSPredicate(format: "messageID == %@", messageID)
+        if let results = try? context.fetch(fetchRequest), let existing = results.first as? NSManagedObject {
+            existing.setValue(audioFileName, forKey: "audioFileName")
+            existing.setValue(senderUsername, forKey: "senderUsername")
+            existing.setValue(senderUserID, forKey: "senderUserID")
+            existing.setValue(receiverUsername, forKey: "receiverUsername")
+            existing.setValue(receiverUserID, forKey: "receiverUserID")
+            existing.setValue(timestamp, forKey: "timestamp")
+            existing.setValue(localURL, forKey: "localURL")
+        } else {
+            let entity = NSEntityDescription.entity(forEntityName: "Message", in: context)!
+            let msg = NSManagedObject(entity: entity, insertInto: context)
+            msg.setValue(messageID, forKey: "messageID")
+            msg.setValue(audioFileName, forKey: "audioFileName")
+            msg.setValue(senderUsername, forKey: "senderUsername")
+            msg.setValue(senderUserID, forKey: "senderUserID")
+            msg.setValue(receiverUsername, forKey: "receiverUsername")
+            msg.setValue(receiverUserID, forKey: "receiverUserID")
+            msg.setValue(timestamp, forKey: "timestamp")
+            msg.setValue(localURL, forKey: "localURL")
+        }
+        try? context.save()
+    }
+
+    // Sync all DM messages from Firestore to Core Data for a conversation
+    @MainActor
+    func syncDMToCoreData(with otherUserID: String) async {
+        let folder = dmFolderName(with: otherUserID)
+        let db = Firestore.firestore()
+        do {
+            let snapshot = try await db.collection("dmMessages").document(folder).collection("messages").order(by: "timestamp").getDocuments()
+            for doc in snapshot.documents {
+                let data = doc.data()
+                guard let messageID = data["messageID"] as? String,
+                      let audioFileName = data["audioFileName"] as? String,
+                      let senderUsername = data["senderUsername"] as? String,
+                      let senderUserID = data["senderUserID"] as? String,
+                      let receiverUsername = data["receiverUsername"] as? String,
+                      let receiverUserID = data["receiverUserID"] as? String,
+                      let timestamp = (data["timestamp"] as? Timestamp)?.dateValue() else { continue }
+                saveDMMessageToCoreData(messageID: messageID, audioFileName: audioFileName, senderUsername: senderUsername, senderUserID: senderUserID, receiverUsername: receiverUsername, receiverUserID: receiverUserID, timestamp: timestamp, localURL: nil)
+            }
+        } catch {
+            print("Failed to sync DM messages: \(error.localizedDescription)")
+        }
     }
 }
 

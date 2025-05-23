@@ -16,9 +16,19 @@ struct ContentView: View {
     @State private var usernameError: String? = nil
     @State private var isCheckingUsername: Bool = false
     @State private var isEditingUsername: Bool = false
+    @State private var showDM: Bool = false
 
     var body: some View {
         VStack {
+            HStack {
+                Spacer()
+                Button(action: { showDM = true }) {
+                    Label("DM", systemImage: "bubble.left.and.bubble.right.fill")
+                        .labelStyle(IconOnlyLabelStyle())
+                        .font(.title2)
+                        .padding(8)
+                }
+            }
             VStack(spacing: 8) {
                 if isEditingUsername {
                     HStack {
@@ -86,6 +96,9 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $viewModel.isShowingAudioFiles) {
             AudioFilesListView()
+        }
+        .fullScreenCover(isPresented: $showDM) {
+            DirectMessageView(onExit: { showDM = false })
         }
         .disabled(username.isEmpty)
     }

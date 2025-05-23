@@ -12,6 +12,7 @@ import AVFoundation
 
 class AudioRecorder {
     private var audioRecorder: AVAudioRecorder?
+    public private(set) var lastRecordingURL: URL?
     
     func startRecording() {
         let audioSession = AVAudioSession.sharedInstance()
@@ -20,6 +21,7 @@ class AudioRecorder {
             try audioSession.setActive(true)
             
             let audioFileURL = generateFileName() // Use the generateFileName method
+            lastRecordingURL = audioFileURL
             
             let settings: [String: Any] = [
                 AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
@@ -34,34 +36,12 @@ class AudioRecorder {
             print("Failed to start recording: \(error.localizedDescription)")
         }
     }
-    
-//    func startRecording() {
-//        let audioSession = AVAudioSession.sharedInstance()
-//        do {
-//            try audioSession.setCategory(.playAndRecord, mode: .default)
-//            try audioSession.setActive(true)
-//
-//            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-//            let timestamp = Int(Date().timeIntervalSince1970) // Unique timestamp
-//            let audioFileURL = documentsPath.appendingPathComponent("recording_\(timestamp).m4a")
-//
-//            let settings: [String: Any] = [
-//                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-//                AVSampleRateKey: 44100,
-//                AVNumberOfChannelsKey: 2,
-//                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-//            ]
-//
-//            audioRecorder = try AVAudioRecorder(url: audioFileURL, settings: settings)
-//            audioRecorder?.record()
-//        } catch {
-//            print("Failed to start recording: \(error.localizedDescription)")
-//        }
-//    }
+
     
     func stopRecording() {
         audioRecorder?.stop()
         if let fileURL = audioRecorder?.url {
+            lastRecordingURL = fileURL
             Task {
                 await AudioFileManager.shared.uploadAudioFile(fileURL, customName: nil)
             }
